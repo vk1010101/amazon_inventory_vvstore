@@ -1,81 +1,165 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <!-- Defines the document as HTML5 and sets the language to English -->
-    <meta charset="UTF-8">
-    <title>Inventory Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-</head>
-<body>
-    <header>Inventory Management <div>Admin</div></header>
+{% extends 'layout.html' %}
+{% block title %}Inventory Dashboard · VVStore{% endblock %}
 
-    <div class="sidebar">
-        <a href="{{ url_for('index') }}" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-        <a href="{{ url_for('upload') }}"><i class="fas fa-upload"></i> Single Upload</a>
-        <a href="{{ url_for('bulk_upload') }}"><i class="fas fa-file-upload"></i> Bulk Upload</a>
+{% block content %}
+<section class="cards cards-metrics">
+    <article class="card card-blue">
+        <div class="card-header">
+            <h3>Total Products</h3>
+            <i class="fas fa-boxes-stacked"></i>
+        </div>
+        <p class="metric">{{ inventory|length }}</p>
+        <p class="card-subtitle">Across all active categories</p>
+    </article>
+    <article class="card card-green">
+        <div class="card-header">
+            <h3>Total Quantity</h3>
+            <i class="fas fa-cubes"></i>
+        </div>
+        <p class="metric">{{ total_quantity }}</p>
+        <p class="card-subtitle">Live inventory count</p>
+    </article>
+    <article class="card card-indigo">
+        <div class="card-header">
+            <h3>Inventory Value</h3>
+            <i class="fas fa-indian-rupee-sign"></i>
+        </div>
+        <p class="metric">₹{{ "%.2f"|format(analytics.total_inventory_value if analytics else 0) }}</p>
+        <p class="card-subtitle">Cost of goods on hand</p>
+    </article>
+    <article class="card card-amber">
+        <div class="card-header">
+            <h3>Potential Revenue</h3>
+            <i class="fas fa-coins"></i>
+        </div>
+        <p class="metric">₹{{ "%.2f"|format(analytics.potential_revenue if analytics else 0) }}</p>
+        <p class="card-subtitle">If current stock is sold</p>
+    </article>
+</section>
+
+<section class="cards cards-analytics">
+    <article class="card card-slate">
+        <div class="card-header">
+            <h3>Quick Actions</h3>
+            <i class="fas fa-bolt"></i>
+        </div>
+        <div class="card-actions">
+            <a class="ghost-button" href="{{ url_for('upload') }}"><i class="fas fa-plus"></i> Add Product</a>
+            <a class="ghost-button" href="{{ url_for('bulk_upload') }}"><i class="fas fa-file-csv"></i> Bulk Upload</a>
+            <a class="ghost-button" href="{{ url_for('storefront') }}"><i class="fas fa-eye"></i> View Storefront</a>
+        </div>
+    </article>
+    <article class="card card-teal">
+        <div class="card-header">
+            <h3>Average Margin</h3>
+            <i class="fas fa-chart-pie"></i>
+        </div>
+        <p class="metric">{{ analytics.average_margin if analytics else 0 }}%</p>
+        <p class="card-subtitle">Weighted across the entire catalogue</p>
+        <div class="category-distribution">
+            <h4>Top Categories</h4>
+            <ul>
+                {% for category, qty in (analytics.category_distribution if analytics else [])[:5] %}
+                    <li><span>{{ category }}</span><span>{{ qty }} units</span></li>
+                {% else %}
+                    <li><span>No data yet</span></li>
+                {% endfor %}
+            </ul>
+        </div>
+    </article>
+    <article class="card card-alert">
+        <div class="card-header">
+            <h3>Low Stock Alerts</h3>
+            <i class="fas fa-triangle-exclamation"></i>
+        </div>
+        <p class="metric">{{ analytics.low_stock_count if analytics else 0 }}</p>
+        <p class="card-subtitle">SKUs below 40% of initial allocation</p>
+        <ul class="low-stock-list">
+            {% for item in low_stock_items[:5] %}
+                <li>
+                    <span>{{ item.ItemName }}</span>
+                    <span>{{ (item.stock_ratio * 100)|round(0) }}% of {{ item.InitialQuantity }}</span>
+                </li>
+            {% else %}
+                <li><span>All SKUs are healthy.</span></li>
+            {% endfor %}
+        </ul>
+    </article>
+</section>
+
+<section class="card">
+    <div class="card-header align-center">
+        <div>
+            <h2>Inventory Overview</h2>
+            <p class="card-subtitle">Monitor availability, cost structure, and replenishment readiness</p>
+        </div>
+        <form class="table-filter" method="GET" action="{{ url_for('index') }}">
+            <label for="search" class="sr-only">Search inventory</label>
+            <input id="search" name="search" type="search" placeholder="Search products, suppliers or categories" value="{{ analytics.search_query if analytics else request.args.get('search', '') }}">
+            <button type="submit"><i class="fas fa-search"></i></button>
+            {% if analytics and analytics.search_query %}
+                <a class="clear-filter" href="{{ url_for('index') }}">Clear</a>
+            {% endif %}
+        </form>
     </div>
 
-    <div class="main">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <div class="cards">
-            <div class="card card-blue">
-                <h3>Total Products</h3>
-                <p><i class="fas fa-boxes"></i> {{ inventory|length }}</p>
-            </div>
-            <div class="card card-green">
-                <h3>Total Quantity</h3>
-                <p><i class="fas fa-cubes"></i> {{ total_quantity }}</p>
-            </div>
-        </div>
-
-        <div class="card">
-            <h2>Inventory Overview</h2>
-            {% if inventory %}
-                <table>
+    {% if inventory %}
+        <div class="table-wrapper">
+            <table class="inventory-table">
+                <thead>
                     <tr>
-                        <th>Name</th>
+                        <th>Product</th>
                         <th>Category</th>
                         <th>Supplier</th>
                         <th>Purchase Price</th>
                         <th>Profit Margin</th>
                         <th>Selling Price</th>
-                        <th>Quantity</th>
-                        <th>Status</th>
+                        <th>On Hand</th>
+                        <th>Stock Health</th>
                     </tr>
+                </thead>
+                <tbody>
                     {% for item in inventory %}
-                        <tr>
-                            <td>{{ item.itemname or item.ItemName }}</td>
-                            <td>{{ item.category or item.Category }}</td>
-                            <td>{{ item.supplier or item.Supplier }}</td>
-                            <td>${{ "%.2f"|format(item.purchase_price or item.PurchasePrice) }}</td>
-                            <td>{{ item.profit_margin or item.ProfitMargin }}%</td>
-                            <td>${{ "%.2f"|format(item.selling_price or item.SellingPrice) }}</td>
-                            <td>{{ item.quantity or item.Quantity }}</td>
+                        {% set qty = item.Quantity %}
+                        <tr class="{% if item.is_low_stock %}flag-low-stock{% endif %}">
                             <td>
-                                {% set qty = item.quantity or item.Quantity %}
-                                {% if qty > 10 %}
-                                    <span class="badge badge-green">In Stock</span>
-                                {% elif qty > 0 %}
-                                    <span class="badge badge-orange">Low Stock</span>
-                                {% else %}
-                                    <span class="badge badge-red">Out of Stock</span>
-                                {% endif %}
+                                <div class="table-product">
+                                    <strong>{{ item.ItemName }}</strong>
+                                    <span class="muted-text">SKU: {{ item.Id }}</span>
+                                    {% if item.is_low_stock %}
+                                        <span class="badge badge-orange">Reorder soon</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>{{ item.Category or '—' }}</td>
+                            <td>{{ item.Supplier or '—' }}</td>
+                            <td>₹{{ "%.2f"|format(item.PurchasePrice or 0) }}</td>
+                            <td>{{ item.ProfitMargin or 0 }}%</td>
+                            <td>₹{{ "%.2f"|format(item.SellingPrice or 0) }}</td>
+                            <td>{{ qty }}</td>
+                            <td>
+                                <div class="stock-health">
+                                    <div class="stock-progress">
+                                        <div class="stock-progress-fill {% if item.is_low_stock %}progress-critical{% else %}progress-healthy{% endif %}" style="width: {{ (item.stock_ratio * 100)|round(0) }}%"></div>
+                                    </div>
+                                    <span class="stock-percentage">{{ (item.stock_ratio * 100)|round(0) }}% of {{ item.InitialQuantity }}</span>
+                                </div>
                             </td>
                         </tr>
                     {% endfor %}
-                </table>
-            {% else %}
-                <p>No products yet. <a href="{{ url_for('upload') }}">Add your first product.</a></p>
-            {% endif %}
+                </tbody>
+            </table>
         </div>
-    </div>
-</body>
-</html>
+    {% else %}
+        <div class="empty-state">
+            <i class="fas fa-box-open"></i>
+            <h3>No products yet</h3>
+            <p>Kick-start your catalog by adding your first product or importing a CSV.</p>
+            <div class="empty-actions">
+                <a class="ghost-button" href="{{ url_for('upload') }}"><i class="fas fa-plus"></i> Add Product</a>
+                <a class="ghost-button" href="{{ url_for('bulk_upload') }}"><i class="fas fa-file-csv"></i> Bulk Upload</a>
+            </div>
+        </div>
+    {% endif %}
+</section>
+{% endblock %}
