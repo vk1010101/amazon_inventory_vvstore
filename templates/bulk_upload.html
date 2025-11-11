@@ -1,102 +1,118 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Bulk Upload</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-</head>
-<body>
-    <header>Inventory Management <div>Admin</div></header>
+{% extends 'layout.html' %}
+{% block title %}Bulk Upload · VVStore{% endblock %}
 
-    <div class="sidebar">
-        <a href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}class="active"{% endif %}>
-            <i class="fas fa-tachometer-alt"></i> Dashboard
-        </a>
-        <a href="{{ url_for('upload') }}" {% if request.endpoint == 'upload' %}class="active"{% endif %}>
-            <i class="fas fa-upload"></i> Single Upload
-        </a>
-        <a href="{{ url_for('bulk_upload') }}" {% if request.endpoint == 'bulk_upload' %}class="active"{% endif %}>
-            <i class="fas fa-file-upload"></i> Bulk Upload
-        </a>
-        <a href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}class="active"{% endif %}>
-
-            <i class="fas fa-chart-line"></i> MIS
-        </a>
-        <a href="{{ url_for('settings') }}" {% if request.endpoint == 'settings' %}class="active"{% endif %}>
-            <i class="fas fa-cog"></i> Settings
-        </a>
+{% block content %}
+<section class="page-heading">
+    <div>
+        <h1>Bulk Upload Catalog</h1>
+        <p class="lead">Drop in a CSV to provision multiple SKUs with accurate pricing instantly.</p>
     </div>
+    <a class="ghost-button" href="{{ url_for('upload') }}"><i class="fas fa-plus"></i> Single Upload</a>
+</section>
 
-    <div class="main">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="flash-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <div class="card">
-            <h2>Bulk CSV Upload</h2>
-            <p><strong>Format:</strong> item_name,category,supplier,purchase_price,profit_margin,quantity</p>
-            <div class="drag-drop" id="dragArea">
-                <i class="fas fa-cloud-upload-alt"></i><br>
-                Click or Drag CSV Here
-                <input type="file" name="file" id="fileInput" style="display:none;" accept=".csv">
-            </div>
+<section class="card form-card">
+    <div class="card-header align-start">
+        <div>
+            <h2>Upload Instructions</h2>
+            <p class="card-subtitle">Accepted columns: <strong>item_name, category, supplier, purchase_price, profit_margin, quantity</strong></p>
         </div>
+        <a class="ghost-button" href="{{ url_for('static', filename='bulk_template.csv') }}" download><i class="fas fa-download"></i> Download Template</a>
     </div>
 
-    <script>
-        const dropArea = document.getElementById('dragArea');
-        const fileInput = document.getElementById('fileInput');
+    <form id="bulkUploadForm" method="POST" enctype="multipart/form-data" class="upload-form">
+        <div class="drag-drop" id="dragArea">
+            <i class="fas fa-cloud-arrow-up"></i>
+            <h3>Upload CSV File</h3>
+            <p>Drag &amp; drop or browse from your computer</p>
+            <button type="button" class="ghost-button" id="browseButton"><i class="fas fa-folder-open"></i> Browse Files</button>
+            <input type="file" name="file" id="fileInput" accept=".csv" hidden>
+            <p class="helper-text" id="fileName">No file selected</p>
+        </div>
+        <div class="form-actions">
+            <button type="submit"><i class="fas fa-file-import"></i> Process Upload</button>
+            <a class="ghost-button" href="{{ url_for('index') }}"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
+        </div>
+    </form>
+</section>
+{% endblock %}
 
-        // Handle drag events
-        ['dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, (e) => {
-                e.preventDefault();
-                dropArea.classList.toggle('active', eventName === 'dragover');
-            });
+{% block extra_scripts %}
+<script>
+    const dropArea = document.getElementById('dragArea');
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+    const browseButton = document.getElementById('browseButton');
+    const form = document.getElementById('bulkUploadForm');
+
+    const highlight = () => dropArea.classList.add('active');
+    const unhighlight = () => dropArea.classList.remove('active');
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            highlight();
         });
+    });
 
-        // Handle file drop
-        dropArea.addEventListener('drop', (e) => {
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                uploadFile(files[0]);
-            }
-        });
-
-        // Handle file selection via click
-        dropArea.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', (e) => {
-            if (fileInput.files.length > 0) {
-                uploadFile(fileInput.files[0]);
-            }
-        });
-
-        // Function to upload file via AJAX
-        function uploadFile(file) {
-            const formData = new FormData();
-            formData.append('file', file);
-
-            fetch('/bulk_upload', {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json()) // Assuming JSON response for now
-            .then(data => {
-                if (data.message) {
-                    alert(data.message); // Simple feedback
-                    window.location.reload(); // Reload to show flash messages
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            if (eventName === 'drop') {
+                if (event.dataTransfer.files.length) {
+                    fileInput.files = event.dataTransfer.files;
+                    updateFileName();
+                    form.requestSubmit();
                 }
-            })
-            .catch(error => {
-                alert('Error uploading file: ' + error);
-                window.location.reload();
-            });
+            }
+            unhighlight();
+        });
+    });
+
+    dropArea.addEventListener('click', () => fileInput.click());
+    browseButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        fileInput.click();
+    });
+    fileInput.addEventListener('change', updateFileName);
+
+    function updateFileName() {
+        if (fileInput.files.length) {
+            fileName.textContent = fileInput.files[0].name;
+        } else {
+            fileName.textContent = 'No file selected';
         }
-    </script>
-</body>
-</html>
+    }
+
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        if (!fileInput.files.length) {
+            alert('Please select a CSV file before uploading.');
+            return;
+        }
+
+        const formData = new FormData(form);
+        fetch(form.action, {
+            method: 'POST',
+            body: formData,
+        }).then(response => {
+            if (response.redirected) {
+                window.location.href = response.url;
+                return;
+            }
+            const contentType = response.headers.get('Content-Type') || '';
+            if (contentType.includes('application/json')) {
+                return response.json();
+            }
+            return response.text();
+        }).then(data => {
+            if (!data) return;
+            if (typeof data === 'object' && data.message) {
+                alert(data.message);
+            }
+            window.location.reload();
+        }).catch(error => {
+            alert('Error uploading file: ' + error);
+        });
+    });
+</script>
+{% endblock %}

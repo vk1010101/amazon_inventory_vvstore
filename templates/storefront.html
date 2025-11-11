@@ -3,137 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Storefront - Product Listing</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f9f9f9;
-            color: #333;
-        }
-        .header {
-            background-color: #232f3e;
-            color: #fff;
-            padding: 10px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 1.5em;
-        }
-        .product-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 20px;
-            padding: 20px;
-        }
-        .product-card {
-            background-color: white;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            padding: 15px;
-            text-align: center;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            transition: transform 0.2s;
-            cursor: pointer;
-        }
-        .product-card:hover {
-            transform: scale(1.02);
-        }
-        .product-image {
-            max-width: 100%;
-            height: 200px;
-            object-fit: cover;
-            border-radius: 5px;
-            margin-bottom: 10px;
-        }
-        .product-name {
-            font-size: 1.1em;
-            font-weight: bold;
-            margin: 10px 0 5px 0;
-        }
-        .prices {
-            display: flex;
-            justify-content: center;
-            align-items: baseline;
-            margin: 10px 0;
-        }
-        .original-price {
-            text-decoration: line-through;
-            color: #999;
-            font-size: 0.9em;
-            margin-right: 10px;
-        }
-        .sale-price {
-            color: #b12704;
-            font-size: 1.2em;
-            font-weight: bold;
-        }
-        .discount {
-            color: #27ae60;
-            font-weight: bold;
-            margin-left: 10px;
-            background-color: #d4edda;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 0.8em;
-        }
-        .quantity {
-            color: #555;
-            margin-top: 5px;
-            font-size: 0.9em;
-        }
-        .delivery-info {
-            font-size: 0.8em;
-            color: #666;
-            margin-top: 10px;
-            text-align: center;
-        }
-    </style>
+    <title>VVStore Marketplace</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2qqeVYBxdEP+YB7C6yJ86dIHNDz0W1xZg2L2k2P1m7C8WRA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
 </head>
-<body>
-    <div class="header">
-        <h1>Shop Our Products</h1>
-    </div>
-    <p style="text-align: center; margin: 10px 0;">Total Items Available: {{ total_quantity }}</p>
-    <div class="product-grid">
-        {% for item in inventory %}
-        <div class="product-card" onclick="window.location.href='/product/{{ item.Id }}'">
-            <img class="product-image" id="image-{{ item.Id }}" src="{{ url_for('static', filename='no-image.png') }}" alt="{{ item.ItemName }}">
-            <h3 class="product-name">{{ item.ItemName }}</h3>
-           <div class="prices">
-    <span class="original-price">${{ "%.2f"|format(item.SellingPrice) }}</span>  <!-- Full price, not PurchasePrice! -->
-    {% if item.SalePrice and item.discount > 0 %}
-        <span class="sale-price">${{ "%.2f"|format(item.SalePrice) }}</span>
-        <span class="discount">{{ item.discount }}% OFF</span>
-    {% else %}
-        <span class="sale-price">${{ "%.2f"|format(item.SellingPrice) }}</span>
-    {% endif %}
-</div>
-            <p class="quantity">Available: {{ item.Quantity }}</p>
-            <p class="delivery-info">Free Delivery on orders over ₹500 | In Stock</p>
+<body class="storefront">
+    <header class="storefront-header">
+        <div class="storefront-brand" onclick="window.location.href='{{ url_for('storefront') }}'">
+            <i class="fas fa-cart-shopping"></i>
+            <span>VVStore</span>
         </div>
-        {% endfor %}
-    </div>
+        <div class="storefront-meta">
+            <span class="storefront-total">Total Inventory: {{ total_quantity }}</span>
+            <a class="storefront-cart" href="{{ url_for('view_cart') }}">
+                <i class="fas fa-shopping-bag"></i>
+                <span>Cart</span>
+                <span class="cart-count">{{ cart_count }}</span>
+            </a>
+            <a class="storefront-admin" href="{{ url_for('index') }}">
+                <i class="fas fa-gauge-high"></i>
+                <span>Admin Console</span>
+            </a>
+        </div>
+    </header>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    {% for item in inventory %}
-        var photoList{{ item.Id | replace('-', '_') }} = {{ item.photo_list | tojson | safe }};
-        if (photoList{{ item.Id | replace('-', '_') }} && photoList{{ item.Id | replace('-', '_') }}.length > 0) {
-            var firstPhoto = photoList{{ item.Id | replace('-', '_') }}[0];
-            var imageElement = document.getElementById('image-{{ item.Id }}');
-            if (imageElement) {
-                imageElement.src = '/static/photos/' + firstPhoto;
-                imageElement.alt = '{{ item.ItemName }}';
-                imageElement.onerror = function() { this.src = '{{ url_for('static', filename='no-image.png') }}'; };  // Fallback
+    <main class="storefront-main">
+        <section class="storefront-hero">
+            <div>
+                <h1>Discover B2B &amp; Retail Ready Inventory</h1>
+                <p>Handpicked catalogue sourced directly from verified suppliers. Seamlessly transition from bulk procurement to storefront sales.</p>
+            </div>
+            <div class="hero-meta">
+                <div class="meta-card">
+                    <i class="fas fa-boxes-stacked"></i>
+                    <p>{{ inventory|length }} live SKUs</p>
+                </div>
+                <div class="meta-card">
+                    <i class="fas fa-truck-fast"></i>
+                    <p>Pan-India fulfilment</p>
+                </div>
+                <div class="meta-card">
+                    <i class="fas fa-shield-check"></i>
+                    <p>Secure transactions</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="product-grid">
+            {% for item in inventory %}
+            <article class="product-card">
+                <a class="product-image-link" href="{{ url_for('product_detail', id=item.Id) }}">
+                    <img class="product-image" id="image-{{ item.Id }}" src="{{ url_for('static', filename='no-image.png') }}" alt="{{ item.ItemName }}">
+                </a>
+                <div class="product-body">
+                    <h3 class="product-name">{{ item.ItemName }}</h3>
+                    <p class="product-supplier">Supplied by {{ item.Supplier or 'Partner Network' }}</p>
+                    <div class="prices">
+                        {% if item.discount > 0 %}
+                            <span class="original-price">₹{{ "%.2f"|format(item.SellingPrice) }}</span>
+                            <span class="sale-price">₹{{ "%.2f"|format(item.display_price) }}</span>
+                            <span class="discount">{{ item.discount }}% OFF</span>
+                        {% else %}
+                            <span class="sale-price">₹{{ "%.2f"|format(item.display_price) }}</span>
+                        {% endif %}
+                    </div>
+                    <p class="quantity">Available: {{ item.Quantity }}</p>
+                </div>
+                <div class="product-actions">
+                    <a class="action-link" href="{{ url_for('product_detail', id=item.Id) }}">View Details</a>
+                    <form action="{{ url_for('add_to_cart', product_id=item.Id) }}" method="post">
+                        <input type="hidden" name="quantity" value="1">
+                        <button class="action-primary" type="submit">
+                            <i class="fas fa-cart-plus"></i>
+                            Add to Cart
+                        </button>
+                    </form>
+                </div>
+            </article>
+            {% endfor %}
+        </section>
+    </main>
+
+    <footer class="storefront-footer">
+        <p>&copy; {{ now().year }} VVStore Commerce Platform</p>
+    </footer>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        {% for item in inventory %}
+            const photoList{{ item.Id | replace('-', '_') }} = {{ item.photo_list | tojson | safe }};
+            if (photoList{{ item.Id | replace('-', '_') }} && photoList{{ item.Id | replace('-', '_') }}.length > 0) {
+                const firstPhoto = photoList{{ item.Id | replace('-', '_') }}[0];
+                const imageElement = document.getElementById('image-{{ item.Id }}');
+                if (imageElement) {
+                    imageElement.src = '/static/photos/' + firstPhoto;
+                    imageElement.alt = '{{ item.ItemName }}';
+                    imageElement.onerror = function() { this.src = '{{ url_for('static', filename='no-image.png') }}'; };
+                }
             }
-        }
-    {% endfor %}
-});
-</script>
+        {% endfor %}
+    });
+    </script>
 </body>
 </html>

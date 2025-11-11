@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Cart - VVStore</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2qqeVYBxdEP+YB7C6yJ86dIHNDz0W1xZg2L2k2P1m7C8WRA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body class="storefront">
+    <header class="storefront-header">
+        <div class="storefront-brand" onclick="window.location.href='{{ url_for('storefront') }}'">
+            <i class="fas fa-cart-shopping"></i>
+            <span>VVStore</span>
+        </div>
+        <div class="storefront-meta">
+            <a class="storefront-cart" href="{{ url_for('storefront') }}">
+                <i class="fas fa-store"></i>
+                <span>Continue Shopping</span>
+            </a>
+        </div>
+    </header>
+
+    <main class="cart-main">
+        <section class="cart-summary">
+            <h1>Shopping Cart</h1>
+            {% if cart_items|length == 0 %}
+                <div class="empty-state">
+                    <i class="fas fa-basket-shopping"></i>
+                    <p>Your cart is currently empty. Discover new products on the storefront.</p>
+                    <a class="action-primary" href="{{ url_for('storefront') }}">Browse Catalogue</a>
+                </div>
+            {% else %}
+                <div class="cart-grid">
+                    <div class="cart-items">
+                        {% for item in cart_items %}
+                            <article class="cart-item">
+                                <div class="cart-item-image">
+                                    {% if item.photo %}
+                                        <img src="/static/photos/{{ item.photo }}" alt="{{ item.name }}" onerror="this.src='{{ url_for('static', filename='no-image.png') }}'">
+                                    {% else %}
+                                        <img src="{{ url_for('static', filename='no-image.png') }}" alt="{{ item.name }}">
+                                    {% endif %}
+                                </div>
+                                <div class="cart-item-body">
+                                    <h3>{{ item.name }}</h3>
+                                    <p class="cart-price">₹{{ "%.2f"|format(item.unit_price) }}</p>
+                                    <form class="cart-quantity" action="{{ url_for('update_cart', product_id=item.product_id) }}" method="post">
+                                        <label for="quantity-{{ loop.index }}">Qty</label>
+                                        <input id="quantity-{{ loop.index }}" type="number" name="quantity" value="{{ item.quantity }}" min="0">
+                                        <button type="submit" class="action-link">Update</button>
+                                    </form>
+                                    <form action="{{ url_for('remove_from_cart', product_id=item.product_id) }}" method="post">
+                                        <button type="submit" class="action-text">Remove</button>
+                                    </form>
+                                </div>
+                                <div class="cart-item-total">
+                                    <span>Line Total</span>
+                                    <strong>₹{{ "%.2f"|format(item.quantity * item.unit_price) }}</strong>
+                                </div>
+                            </article>
+                        {% endfor %}
+                    </div>
+                    <aside class="cart-checkout">
+                        <div class="checkout-card">
+                            <h2>Order Summary</h2>
+                            <p><span>Items</span><span>{{ total_items }}</span></p>
+                            <p><span>Subtotal</span><span>₹{{ "%.2f"|format(total_amount) }}</span></p>
+                            <form action="{{ url_for('checkout') }}" method="post" class="checkout-form">
+                                <label for="email">Email for confirmation (optional)</label>
+                                <input id="email" name="email" type="email" placeholder="you@company.com">
+                                <button type="submit" class="action-primary full-width">
+                                    <i class="fas fa-lock"></i>
+                                    Secure Checkout
+                                </button>
+                            </form>
+                            <p class="checkout-note">By placing the order you confirm supplier allocation and agree to VVStore transaction policies.</p>
+                        </div>
+                    </aside>
+                </div>
+            {% endif %}
+        </section>
+    </main>
+
+    <footer class="storefront-footer">
+        <p>&copy; {{ now().year }} VVStore Commerce Platform</p>
+    </footer>
+</body>
+</html>
