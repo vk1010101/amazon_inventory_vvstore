@@ -2,7 +2,7 @@
 {% block title %}Inventory Dashboard · VVStore{% endblock %}
 
 {% block content %}
-<section class="cards">
+<section class="cards cards-metrics">
     <article class="card card-blue">
         <div class="card-header">
             <h3>Total Products</h3>
@@ -19,6 +19,25 @@
         <p class="metric">{{ total_quantity }}</p>
         <p class="card-subtitle">Live inventory count</p>
     </article>
+    <article class="card card-indigo">
+        <div class="card-header">
+            <h3>Inventory Value</h3>
+            <i class="fas fa-indian-rupee-sign"></i>
+        </div>
+        <p class="metric">₹{{ "%.2f"|format(analytics.total_inventory_value if analytics else 0) }}</p>
+        <p class="card-subtitle">Cost of goods on hand</p>
+    </article>
+    <article class="card card-amber">
+        <div class="card-header">
+            <h3>Potential Revenue</h3>
+            <i class="fas fa-coins"></i>
+        </div>
+        <p class="metric">₹{{ "%.2f"|format(analytics.potential_revenue if analytics else 0) }}</p>
+        <p class="card-subtitle">If current stock is sold</p>
+    </article>
+</section>
+
+<section class="cards cards-analytics">
     <article class="card card-slate">
         <div class="card-header">
             <h3>Quick Actions</h3>
@@ -30,55 +49,101 @@
             <a class="ghost-button" href="{{ url_for('storefront') }}"><i class="fas fa-eye"></i> View Storefront</a>
         </div>
     </article>
+    <article class="card card-teal">
+        <div class="card-header">
+            <h3>Average Margin</h3>
+            <i class="fas fa-chart-pie"></i>
+        </div>
+        <p class="metric">{{ analytics.average_margin if analytics else 0 }}%</p>
+        <p class="card-subtitle">Weighted across the entire catalogue</p>
+        <div class="category-distribution">
+            <h4>Top Categories</h4>
+            <ul>
+                {% for category, qty in (analytics.category_distribution if analytics else [])[:5] %}
+                    <li><span>{{ category }}</span><span>{{ qty }} units</span></li>
+                {% else %}
+                    <li><span>No data yet</span></li>
+                {% endfor %}
+            </ul>
+        </div>
+    </article>
+    <article class="card card-alert">
+        <div class="card-header">
+            <h3>Low Stock Alerts</h3>
+            <i class="fas fa-triangle-exclamation"></i>
+        </div>
+        <p class="metric">{{ analytics.low_stock_count if analytics else 0 }}</p>
+        <p class="card-subtitle">SKUs below 40% of initial allocation</p>
+        <ul class="low-stock-list">
+            {% for item in low_stock_items[:5] %}
+                <li>
+                    <span>{{ item.ItemName }}</span>
+                    <span>{{ (item.stock_ratio * 100)|round(0) }}% of {{ item.InitialQuantity }}</span>
+                </li>
+            {% else %}
+                <li><span>All SKUs are healthy.</span></li>
+            {% endfor %}
+        </ul>
+    </article>
 </section>
 
 <section class="card">
     <div class="card-header align-center">
         <div>
             <h2>Inventory Overview</h2>
-            <p class="card-subtitle">Track profitability and availability for every SKU</p>
+            <p class="card-subtitle">Monitor availability, cost structure, and replenishment readiness</p>
         </div>
         <form class="table-filter" method="GET" action="{{ url_for('index') }}">
             <label for="search" class="sr-only">Search inventory</label>
-            <input id="search" name="search" type="search" placeholder="Search products" value="{{ request.args.get('search', '') }}" disabled>
-            <span class="helper-text">Global search coming soon</span>
+            <input id="search" name="search" type="search" placeholder="Search products, suppliers or categories" value="{{ analytics.search_query if analytics else request.args.get('search', '') }}">
+            <button type="submit"><i class="fas fa-search"></i></button>
+            {% if analytics and analytics.search_query %}
+                <a class="clear-filter" href="{{ url_for('index') }}">Clear</a>
+            {% endif %}
         </form>
     </div>
 
     {% if inventory %}
         <div class="table-wrapper">
-            <table>
+            <table class="inventory-table">
                 <thead>
                     <tr>
-                        <th>Name</th>
+                        <th>Product</th>
                         <th>Category</th>
                         <th>Supplier</th>
                         <th>Purchase Price</th>
                         <th>Profit Margin</th>
                         <th>Selling Price</th>
-                        <th>Quantity</th>
-                        <th>Status</th>
+                        <th>On Hand</th>
+                        <th>Stock Health</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for item in inventory %}
-                        {% set qty = item.quantity or item.Quantity %}
-                        <tr>
-                            <td>{{ item.itemname or item.ItemName }}</td>
-                            <td>{{ item.category or item.Category }}</td>
-                            <td>{{ item.supplier or item.Supplier }}</td>
-                            <td>${{ "%.2f"|format(item.purchase_price or item.PurchasePrice) }}</td>
-                            <td>{{ item.profit_margin or item.ProfitMargin }}%</td>
-                            <td>${{ "%.2f"|format(item.selling_price or item.SellingPrice) }}</td>
+                        {% set qty = item.Quantity %}
+                        <tr class="{% if item.is_low_stock %}flag-low-stock{% endif %}">
+                            <td>
+                                <div class="table-product">
+                                    <strong>{{ item.ItemName }}</strong>
+                                    <span class="muted-text">SKU: {{ item.Id }}</span>
+                                    {% if item.is_low_stock %}
+                                        <span class="badge badge-orange">Reorder soon</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>{{ item.Category or '—' }}</td>
+                            <td>{{ item.Supplier or '—' }}</td>
+                            <td>₹{{ "%.2f"|format(item.PurchasePrice or 0) }}</td>
+                            <td>{{ item.ProfitMargin or 0 }}%</td>
+                            <td>₹{{ "%.2f"|format(item.SellingPrice or 0) }}</td>
                             <td>{{ qty }}</td>
                             <td>
-                                {% if qty > 10 %}
-                                    <span class="badge badge-green">In Stock</span>
-                                {% elif qty > 0 %}
-                                    <span class="badge badge-orange">Low Stock</span>
-                                {% else %}
-                                    <span class="badge badge-red">Out of Stock</span>
-                                {% endif %}
+                                <div class="stock-health">
+                                    <div class="stock-progress">
+                                        <div class="stock-progress-fill {% if item.is_low_stock %}progress-critical{% else %}progress-healthy{% endif %}" style="width: {{ (item.stock_ratio * 100)|round(0) }}%"></div>
+                                    </div>
+                                    <span class="stock-percentage">{{ (item.stock_ratio * 100)|round(0) }}% of {{ item.InitialQuantity }}</span>
+                                </div>
                             </td>
                         </tr>
                     {% endfor %}

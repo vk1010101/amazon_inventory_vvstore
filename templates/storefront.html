@@ -9,31 +9,103 @@
 </head>
 <body class="storefront">
     <header class="storefront-header">
-        <div class="storefront-brand" onclick="window.location.href='{{ url_for('storefront') }}'">
-            <i class="fas fa-cart-shopping"></i>
-            <span>VVStore</span>
+        <div class="storefront-topbar">
+            <div class="storefront-brand" onclick="window.location.href='{{ url_for('storefront') }}'">
+                <i class="fas fa-cart-shopping"></i>
+                <div class="brand-copy">
+                    <span class="brand-title">VVStore</span>
+                    <span class="brand-tagline">Procure. Launch. Scale.</span>
+                </div>
+            </div>
+            <form class="storefront-search" method="get" action="{{ url_for('storefront') }}">
+                <label for="storefront-search-input" class="sr-only">Search catalogue</label>
+                <input id="storefront-search-input" name="q" type="search" placeholder="Search for products, categories or suppliers" value="{{ search_query }}">
+                {% if category_filter %}
+                    <input type="hidden" name="category" value="{{ category_filter }}">
+                {% endif %}
+                <button type="submit"><i class="fas fa-search"></i></button>
+            </form>
+            <div class="storefront-actions">
+                <div class="location-pill">
+                    <i class="fas fa-location-dot"></i>
+                    <div>
+                        <small>Deliver to</small>
+                        <strong>All India</strong>
+                    </div>
+                </div>
+                <div class="account-menu">
+                    <button class="account-trigger" type="button">
+                        <i class="fas fa-user-circle"></i>
+                        <span class="account-label">
+                            {% if customer_user %}
+                                <small>Hello,</small>
+                                <strong>{{ customer_user.name }}</strong>
+                            {% else %}
+                                <small>Hello, sign in</small>
+                                <strong>Account &amp; Lists</strong>
+                            {% endif %}
+                        </span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="account-dropdown">
+                        {% if customer_user %}
+                            <span class="account-email">{{ customer_user.email }}</span>
+                            <a href="{{ url_for('customer_logout') }}"><i class="fas fa-right-from-bracket"></i> Sign out</a>
+                        {% else %}
+                            <a href="{{ url_for('customer_login') }}"><i class="fas fa-right-to-bracket"></i> Customer Login</a>
+                            <a href="{{ url_for('customer_register') }}"><i class="fas fa-user-plus"></i> Create Account</a>
+                        {% endif %}
+                        <hr>
+                        <a href="{{ url_for('supplier_login') }}"><i class="fas fa-user-shield"></i> Supplier Console</a>
+                    </div>
+                </div>
+                <a class="storefront-orders" href="{{ url_for('customer_login') }}">
+                    <i class="fas fa-box"></i>
+                    <span>Your Orders</span>
+                </a>
+                <a class="storefront-cart" href="{{ url_for('view_cart') }}">
+                    <i class="fas fa-shopping-bag"></i>
+                    <span>Cart</span>
+                    <span class="cart-count">{{ cart_count }}</span>
+                </a>
+            </div>
         </div>
-        <div class="storefront-meta">
-            <span class="storefront-total">Total Inventory: {{ total_quantity }}</span>
-            <a class="storefront-cart" href="{{ url_for('view_cart') }}">
-                <i class="fas fa-shopping-bag"></i>
-                <span>Cart</span>
-                <span class="cart-count">{{ cart_count }}</span>
-            </a>
-            <a class="storefront-admin" href="{{ url_for('index') }}">
-                <i class="fas fa-gauge-high"></i>
-                <span>Admin Console</span>
-            </a>
-        </div>
+        <nav class="storefront-subnav">
+            <ul>
+                <li class="{% if not category_filter %}active{% endif %}"><a href="{{ url_for('storefront', q=search_query) }}">All</a></li>
+                {% for category in featured_categories %}
+                    <li class="{% if category_filter and category_filter.lower() == category.name.lower() %}active{% endif %}"><a href="{{ url_for('storefront', category=category.name, q=search_query) }}">{{ category.name }}</a></li>
+                {% endfor %}
+            </ul>
+            <span class="storefront-total">Total live inventory: {{ total_quantity }} units</span>
+        </nav>
     </header>
 
     <main class="storefront-main">
-        <section class="storefront-hero">
-            <div>
-                <h1>Discover B2B &amp; Retail Ready Inventory</h1>
-                <p>Handpicked catalogue sourced directly from verified suppliers. Seamlessly transition from bulk procurement to storefront sales.</p>
+        <section class="storefront-hero" {% if spotlight_product and spotlight_product.photo_list %}style="background-image: url('/static/photos/{{ spotlight_product.photo_list[0] }}')"{% endif %}>
+            <div class="hero-overlay"></div>
+            <div class="hero-content">
+                <h1>{{ spotlight_product.ItemName if spotlight_product else 'Discover B2B & Retail Ready Inventory' }}</h1>
+                <p>
+                    {% if spotlight_product %}
+                        {{ spotlight_product.Category or 'Featured assortment' }} · Supplied by {{ spotlight_product.Supplier or 'VVStore Network' }}
+                    {% else %}
+                        Handpicked catalogue sourced directly from verified suppliers. Seamlessly transition from bulk procurement to storefront sales.
+                    {% endif %}
+                </p>
+                {% if spotlight_product %}
+                    <a class="hero-cta" href="{{ url_for('product_detail', id=spotlight_product.Id) }}">
+                        <span>View Featured SKU</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                {% else %}
+                    <a class="hero-cta" href="{{ url_for('storefront') }}">
+                        <span>Browse Catalogue</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                {% endif %}
             </div>
-            <div class="hero-meta">
+            <div class="hero-stats">
                 <div class="meta-card">
                     <i class="fas fa-boxes-stacked"></i>
                     <p>{{ inventory|length }} live SKUs</p>
@@ -43,66 +115,92 @@
                     <p>Pan-India fulfilment</p>
                 </div>
                 <div class="meta-card">
-                    <i class="fas fa-shield-check"></i>
-                    <p>Secure transactions</p>
+                    <i class="fas fa-handshake-angle"></i>
+                    <p>B2B &amp; D2C ready</p>
                 </div>
             </div>
         </section>
 
-        <section class="product-grid">
-            {% for item in inventory %}
-            <article class="product-card">
-                <a class="product-image-link" href="{{ url_for('product_detail', id=item.Id) }}">
-                    <img class="product-image" id="image-{{ item.Id }}" src="{{ url_for('static', filename='no-image.png') }}" alt="{{ item.ItemName }}">
-                </a>
-                <div class="product-body">
-                    <h3 class="product-name">{{ item.ItemName }}</h3>
-                    <p class="product-supplier">Supplied by {{ item.Supplier or 'Partner Network' }}</p>
-                    <div class="prices">
-                        {% if item.discount > 0 %}
-                            <span class="original-price">₹{{ "%.2f"|format(item.SellingPrice) }}</span>
-                            <span class="sale-price">₹{{ "%.2f"|format(item.display_price) }}</span>
-                            <span class="discount">{{ item.discount }}% OFF</span>
+        {% if featured_categories %}
+        <section class="storefront-featured">
+            <div class="section-header">
+                <h2>Featured categories</h2>
+                <p>Curated assortments that are trending across partner storefronts</p>
+            </div>
+            <div class="featured-grid">
+                {% for category in featured_categories %}
+                    <article class="featured-card" onclick="window.location.href='{{ url_for('storefront', category=category.name) }}'">
+                        {% if category.sample_photo %}
+                            <img src="/static/photos/{{ category.sample_photo }}" alt="{{ category.name }}" onerror="this.remove();">
                         {% else %}
-                            <span class="sale-price">₹{{ "%.2f"|format(item.display_price) }}</span>
+                            <div class="featured-placeholder"><i class="fas fa-layer-group"></i></div>
                         {% endif %}
-                    </div>
-                    <p class="quantity">Available: {{ item.Quantity }}</p>
+                        <div class="featured-body">
+                            <h3>{{ category.name }}</h3>
+                            <p>{{ category.count }} products</p>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        <section class="storefront-results">
+            <div class="section-header">
+                <h2>Catalogue results</h2>
+                <p>{{ inventory|length }} products matched{% if search_query %} for "{{ search_query }}"{% endif %}{% if category_filter %} in {{ category_filter }}{% endif %}</p>
+            </div>
+            {% if inventory %}
+                <div class="product-grid">
+                    {% for item in inventory %}
+                    <article class="product-card">
+                        <a class="product-image-link" href="{{ url_for('product_detail', id=item.Id) }}">
+                            {% if item.photo_list %}
+                                <img class="product-image" src="/static/photos/{{ item.photo_list[0] }}" alt="{{ item.ItemName }}" onerror="this.style.display='none'; this.parentElement.classList.add('image-missing');">
+                            {% else %}
+                                <div class="product-avatar">{{ item.ItemName[:1] }}</div>
+                            {% endif %}
+                        </a>
+                        <div class="product-body">
+                            <h3 class="product-name">{{ item.ItemName }}</h3>
+                            <p class="product-supplier">Supplied by {{ item.Supplier or 'Partner Network' }}</p>
+                            <div class="prices">
+                                {% if item.discount > 0 %}
+                                    <span class="original-price">₹{{ "%.2f"|format(item.SellingPrice) }}</span>
+                                    <span class="sale-price">₹{{ "%.2f"|format(item.display_price) }}</span>
+                                    <span class="discount">{{ item.discount }}% OFF</span>
+                                {% else %}
+                                    <span class="sale-price">₹{{ "%.2f"|format(item.display_price) }}</span>
+                                {% endif %}
+                            </div>
+                            <p class="quantity">{{ item.Quantity }} units ready to ship</p>
+                        </div>
+                        <div class="product-actions">
+                            <a class="action-link" href="{{ url_for('product_detail', id=item.Id) }}">View Details</a>
+                            <form action="{{ url_for('add_to_cart', product_id=item.Id) }}" method="post">
+                                <input type="hidden" name="quantity" value="1">
+                                <button class="action-primary" type="submit">
+                                    <i class="fas fa-cart-plus"></i>
+                                    Add to Cart
+                                </button>
+                            </form>
+                        </div>
+                    </article>
+                    {% endfor %}
                 </div>
-                <div class="product-actions">
-                    <a class="action-link" href="{{ url_for('product_detail', id=item.Id) }}">View Details</a>
-                    <form action="{{ url_for('add_to_cart', product_id=item.Id) }}" method="post">
-                        <input type="hidden" name="quantity" value="1">
-                        <button class="action-primary" type="submit">
-                            <i class="fas fa-cart-plus"></i>
-                            Add to Cart
-                        </button>
-                    </form>
+            {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-magnifying-glass"></i>
+                    <h3>No products found</h3>
+                    <p>Try adjusting your search or explore a different category.</p>
+                    <a class="action-primary" href="{{ url_for('storefront') }}">Clear filters</a>
                 </div>
-            </article>
-            {% endfor %}
+            {% endif %}
         </section>
     </main>
 
     <footer class="storefront-footer">
         <p>&copy; {{ now().year }} VVStore Commerce Platform</p>
     </footer>
-
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        {% for item in inventory %}
-            const photoList{{ item.Id | replace('-', '_') }} = {{ item.photo_list | tojson | safe }};
-            if (photoList{{ item.Id | replace('-', '_') }} && photoList{{ item.Id | replace('-', '_') }}.length > 0) {
-                const firstPhoto = photoList{{ item.Id | replace('-', '_') }}[0];
-                const imageElement = document.getElementById('image-{{ item.Id }}');
-                if (imageElement) {
-                    imageElement.src = '/static/photos/' + firstPhoto;
-                    imageElement.alt = '{{ item.ItemName }}';
-                    imageElement.onerror = function() { this.src = '{{ url_for('static', filename='no-image.png') }}'; };
-                }
-            }
-        {% endfor %}
-    });
-    </script>
 </body>
 </html>

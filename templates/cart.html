@@ -9,16 +9,70 @@
 </head>
 <body class="storefront">
     <header class="storefront-header">
-        <div class="storefront-brand" onclick="window.location.href='{{ url_for('storefront') }}'">
-            <i class="fas fa-cart-shopping"></i>
-            <span>VVStore</span>
+        <div class="storefront-topbar">
+            <div class="storefront-brand" onclick="window.location.href='{{ url_for('storefront') }}'">
+                <i class="fas fa-cart-shopping"></i>
+                <div class="brand-copy">
+                    <span class="brand-title">VVStore</span>
+                    <span class="brand-tagline">Procure. Launch. Scale.</span>
+                </div>
+            </div>
+            <form class="storefront-search" method="get" action="{{ url_for('storefront') }}">
+                <label for="cart-search" class="sr-only">Search catalogue</label>
+                <input id="cart-search" name="q" type="search" placeholder="Search products" value="{{ request.args.get('q', '') }}">
+                <button type="submit"><i class="fas fa-search"></i></button>
+            </form>
+            <div class="storefront-actions">
+                <div class="location-pill">
+                    <i class="fas fa-location-dot"></i>
+                    <div>
+                        <small>Deliver to</small>
+                        <strong>All India</strong>
+                    </div>
+                </div>
+                <div class="account-menu">
+                    <button class="account-trigger" type="button">
+                        <i class="fas fa-user-circle"></i>
+                        <span class="account-label">
+                            {% if customer_user %}
+                                <small>Hello,</small>
+                                <strong>{{ customer_user.name }}</strong>
+                            {% else %}
+                                <small>Hello, sign in</small>
+                                <strong>Account &amp; Lists</strong>
+                            {% endif %}
+                        </span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    <div class="account-dropdown">
+                        {% if customer_user %}
+                            <span class="account-email">{{ customer_user.email }}</span>
+                            <a href="{{ url_for('customer_logout') }}"><i class="fas fa-right-from-bracket"></i> Sign out</a>
+                        {% else %}
+                            <a href="{{ url_for('customer_login') }}"><i class="fas fa-right-to-bracket"></i> Customer Login</a>
+                            <a href="{{ url_for('customer_register') }}"><i class="fas fa-user-plus"></i> Create Account</a>
+                        {% endif %}
+                        <hr>
+                        <a href="{{ url_for('supplier_login') }}"><i class="fas fa-user-shield"></i> Supplier Console</a>
+                    </div>
+                </div>
+                <a class="storefront-orders" href="{{ url_for('customer_login') }}">
+                    <i class="fas fa-box"></i>
+                    <span>Your Orders</span>
+                </a>
+                <a class="storefront-cart" href="{{ url_for('storefront') }}">
+                    <i class="fas fa-store"></i>
+                    <span>Continue Shopping</span>
+                </a>
+            </div>
         </div>
-        <div class="storefront-meta">
-            <a class="storefront-cart" href="{{ url_for('storefront') }}">
-                <i class="fas fa-store"></i>
-                <span>Continue Shopping</span>
-            </a>
-        </div>
+        <nav class="storefront-subnav">
+            <ul>
+                <li class="active"><a href="{{ url_for('storefront') }}">Catalogue</a></li>
+                <li><a href="{{ url_for('storefront', category=request.args.get('category')) }}">Explore Categories</a></li>
+            </ul>
+            <span class="storefront-total">Items in cart: {{ total_items }}</span>
+        </nav>
     </header>
 
     <main class="cart-main">

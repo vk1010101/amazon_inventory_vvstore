@@ -8,7 +8,6 @@ from werkzeug.utils import secure_filename
 import pyodbc
 import logging
 import sys
-from sqlalchemy.dialects.mssql import UNIQUEIDENTIFIER
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -115,6 +114,33 @@ def create_table():
             END
             """
         )
+        cursor.execute(
+            """
+            IF COL_LENGTH('dbo.vanshul_Products', 'InitialQuantity') IS NULL
+            BEGIN
+                ALTER TABLE ICP.dbo.vanshul_Products
+                ADD InitialQuantity INT NULL;
+
+                UPDATE ICP.dbo.vanshul_Products
+                SET InitialQuantity = Quantity
+                WHERE InitialQuantity IS NULL;
+            END
+            """
+        )
+        cursor.execute(
+            """
+            IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Customers' AND xtype='U')
+            BEGIN
+                CREATE TABLE ICP.dbo.Customers (
+                    Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
+                    FullName NVARCHAR(255) NOT NULL,
+                    Email NVARCHAR(255) NOT NULL UNIQUE,
+                    PasswordHash NVARCHAR(255) NOT NULL,
+                    CreatedAt DATETIME DEFAULT GETDATE()
+                )
+            END
+            """
+        )
         conn.commit()
     except pyodbc.Error as e:
         logger.error(f"Failed to ensure tables exist: {e}")
@@ -132,7 +158,15 @@ def allowed_file(filename):
 
 @app.context_processor
 def inject_utilities():
-    return {'now': datetime.utcnow}
+    cart = get_cart()
+    cart_count, cart_total = build_cart_summary(cart)
+    return {
+        'now': datetime.utcnow,
+        'supplier_user': session.get('supplier_user'),
+        'customer_user': session.get('customer_user'),
+        'cart_count': cart_count,
+        'cart_total': cart_total,
+    }
 
 
 def get_cart():
@@ -148,6 +182,121 @@ def build_cart_summary(cart):
     total_items = sum(item['quantity'] for item in cart.values()) if cart else 0
     total_amount = sum(item['quantity'] * item['unit_price'] for item in cart.values()) if cart else 0
     return total_items, total_amount
+
+
+def map_row(cursor, row):
+    columns = [column[0] for column in cursor.description]
+    return dict(zip(columns, row))
+
+
+def verify_password(stored_password, provided_password):
+    if stored_password is None or provided_password is None:
+        return False
+
+    stored_password = str(stored_password)
+    if stored_password.startswith('pbkdf2:'):
+        return check_password_hash(stored_password, provided_password)
+    return stored_password == provided_password
+
+
+def fetch_supplier_account(identifier):
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT TOP 1 *
+            FROM Admins
+            WHERE Email = ? OR Username = ?
+            """,
+            (identifier, identifier),
+        )
+        row = cursor.fetchone()
+        return map_row(cursor, row) if row else None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def fetch_customer_account(email):
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            SELECT TOP 1 *
+            FROM Customers
+            WHERE Email = ?
+            """,
+            (email,),
+        )
+        row = cursor.fetchone()
+        return map_row(cursor, row) if row else None
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def create_customer_account(full_name, email, password):
+    hashed_password = generate_password_hash(password)
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO Customers (Id, FullName, Email, PasswordHash)
+            VALUES (?, ?, ?, ?)
+            """,
+            (str(uuid.uuid4()), full_name, email, hashed_password),
+        )
+        conn.commit()
+    except pyodbc.IntegrityError as exc:
+        conn.rollback()
+        raise ValueError('An account with that email already exists.') from exc
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def supplier_login_required(view_func):
+    @wraps(view_func)
+    def wrapped_view(*args, **kwargs):
+        if not session.get('supplier_user'):
+            flash('Please sign in with your supplier credentials to continue.', 'warning')
+            return redirect(url_for('supplier_login', next=request.path))
+        return view_func(*args, **kwargs)
+
+    return wrapped_view
+
+
+def customer_login_required(view_func):
+    @wraps(view_func)
+    def wrapped_view(*args, **kwargs):
+        if not session.get('customer_user'):
+            flash('Please sign in to manage your cart and checkout.', 'warning')
+            referrer = request.referrer
+            next_target = None
+            if referrer:
+                parsed = urlparse(referrer)
+                if not parsed.netloc or parsed.netloc == request.host:
+                    next_target = parsed.path or url_for('storefront')
+            if not next_target:
+                next_target = url_for('storefront')
+            return redirect(url_for('customer_login', next=next_target))
+        return view_func(*args, **kwargs)
+
+    return wrapped_view
+
+
+def resolve_next(default_endpoint):
+    next_target = request.args.get('next') or request.form.get('next')
+    if next_target:
+        if next_target.startswith('/'):
+            return next_target
+        parsed = urlparse(next_target)
+        if not parsed.netloc or parsed.netloc == request.host:
+            return parsed.path or url_for(default_endpoint)
+    return url_for(default_endpoint)
 
 
 def fetch_product(product_id):
@@ -234,23 +383,79 @@ def create_order_records(order_items, customer_email=None, status='Completed'):
 
 @app.route('/')
 @app.route('/index')
+@supplier_login_required
 def index():
+    search_query = request.args.get('search', '').strip()
     try:
         conn = get_db()
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM vanshul_Products")
+        if search_query:
+            like_query = f"%{search_query}%"
+            cursor.execute(
+                """
+                SELECT * FROM vanshul_Products
+                WHERE ItemName LIKE ? OR Category LIKE ? OR Supplier LIKE ?
+                """,
+                (like_query, like_query, like_query),
+            )
+        else:
+            cursor.execute("SELECT * FROM vanshul_Products")
         products = cursor.fetchall()
-        columns = [column[0] for column in cursor.description]
-        products_dict = [dict(zip(columns, row)) for row in products]
-        total_quantity = sum(row['Quantity'] for row in products_dict) if products_dict else 0
+        products_dict = [map_row(cursor, row) for row in products]
+
+        total_quantity = sum(row.get('Quantity', 0) or 0 for row in products_dict)
+        total_inventory_value = sum((row.get('Quantity', 0) or 0) * (row.get('PurchasePrice') or 0) for row in products_dict)
+        potential_revenue = sum((row.get('Quantity', 0) or 0) * (row.get('SellingPrice') or 0) for row in products_dict)
+        margins = [row.get('ProfitMargin') for row in products_dict if row.get('ProfitMargin') is not None]
+        avg_margin = round(sum(margins) / len(margins), 2) if margins else 0.0
+
+        low_stock_items = []
+        category_distribution = defaultdict(int)
+        for row in products_dict:
+            qty = row.get('Quantity') or 0
+            initial_qty = row.get('InitialQuantity') or qty
+            if initial_qty <= 0:
+                stock_ratio = 1
+            else:
+                stock_ratio = qty / initial_qty
+            row['InitialQuantity'] = initial_qty
+            row['stock_ratio'] = stock_ratio
+            row['is_low_stock'] = initial_qty > 0 and stock_ratio <= 0.4
+            if row['is_low_stock']:
+                low_stock_items.append(row)
+            category_distribution[(row.get('Category') or 'Uncategorised').strip() or 'Uncategorised'] += qty
+
+        analytics = {
+            'total_inventory_value': total_inventory_value,
+            'potential_revenue': potential_revenue,
+            'average_margin': avg_margin,
+            'low_stock_count': len(low_stock_items),
+            'category_distribution': sorted(category_distribution.items(), key=lambda item: item[1], reverse=True),
+            'search_query': search_query,
+        }
+
         logger.info(f"Retrieved {len(products_dict)} products from database")
         cursor.close()
         conn.close()
-        return render_template('index.html', inventory=products_dict, total_quantity=total_quantity, active_page='dashboard')
+        return render_template(
+            'index.html',
+            inventory=products_dict,
+            total_quantity=total_quantity,
+            analytics=analytics,
+            low_stock_items=low_stock_items,
+            active_page='dashboard',
+        )
     except pyodbc.Error as e:
         logger.error(f"Error in index route: {e}")
         flash(f"Error loading inventory: {e}", 'danger')
-        return render_template('index.html', inventory=[], total_quantity=0, active_page='dashboard')
+        return render_template(
+            'index.html',
+            inventory=[],
+            total_quantity=0,
+            analytics={'total_inventory_value': 0, 'potential_revenue': 0, 'average_margin': 0, 'low_stock_count': 0, 'category_distribution': [], 'search_query': search_query},
+            low_stock_items=[],
+            active_page='dashboard',
+        )
 
 @app.route('/products')
 def products():
@@ -272,6 +477,7 @@ def products():
         return render_template('products.html', inventory=[], total_quantity=0)
 
 @app.route('/upload', methods=['GET', 'POST'])
+@supplier_login_required
 def upload():
     if request.method == 'POST':
         try:
@@ -309,10 +515,24 @@ def upload():
 
             conn = get_db()
             cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO vanshul_Products (ItemName, Category, Supplier, PurchasePrice, SalePrice, ProfitMargin, SellingPrice, Quantity, PhotoPaths)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (item_name, category, supplier, purchase_price, sale_price, profit_margin, selling_price, quantity, json.dumps(photo_paths) if photo_paths else None))
+            cursor.execute(
+                """
+                INSERT INTO vanshul_Products (ItemName, Category, Supplier, PurchasePrice, SalePrice, ProfitMargin, SellingPrice, Quantity, InitialQuantity, PhotoPaths)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item_name,
+                    category,
+                    supplier,
+                    purchase_price,
+                    sale_price,
+                    profit_margin,
+                    selling_price,
+                    quantity,
+                    quantity,
+                    json.dumps(photo_paths) if photo_paths else None,
+                ),
+            )
             conn.commit()
             logger.info(f"Added product: {item_name} with {len(photo_paths)} photos")
             flash(f'Product "{item_name}" added successfully with {len(photo_paths)} photos!', 'success')
@@ -336,6 +556,7 @@ def upload():
     return render_template('upload.html', active_page='upload')
 
 @app.route('/bulk_upload', methods=['GET', 'POST'])
+@supplier_login_required
 def bulk_upload():
     if request.method == 'POST':
         if 'file' not in request.files:
@@ -362,12 +583,16 @@ def bulk_upload():
                             float(row.get('profit_margin', 20)),
                             float(row['purchase_price']) * (1 + float(row.get('profit_margin', 20)) / 100),
                             int(row['quantity']),
-                            None  # PhotoPaths
+                            int(row['quantity']),
+                            None,  # PhotoPaths
                         )
-                        cursor.execute("""
-                            INSERT INTO vanshul_Products (ItemName, Category, Supplier, PurchasePrice, ProfitMargin, SellingPrice, Quantity, PhotoPaths)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """, new_product)
+                        cursor.execute(
+                            """
+                            INSERT INTO vanshul_Products (ItemName, Category, Supplier, PurchasePrice, ProfitMargin, SellingPrice, Quantity, InitialQuantity, PhotoPaths)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            new_product,
+                        )
                         added_count += 1
                     except (KeyError, ValueError):
                         flash('Invalid CSV format. Required: item_name, purchase_price, quantity', 'danger')
@@ -387,6 +612,114 @@ def bulk_upload():
         return redirect(url_for('index'))
     return render_template('bulk_upload.html', active_page='bulk_upload')
 
+
+@app.route('/supplier/login', methods=['GET', 'POST'])
+def supplier_login():
+    if session.get('supplier_user'):
+        flash('You are already signed in to the supplier console.', 'info')
+        return redirect(url_for('index'))
+
+    next_url = resolve_next('index')
+    if request.method == 'POST':
+        identifier = request.form.get('identifier', '').strip()
+        password = request.form.get('password', '')
+        if not identifier or not password:
+            flash('Enter both username/email and password.', 'warning')
+        else:
+            account = fetch_supplier_account(identifier)
+            stored_password = None
+            if account:
+                stored_password = (
+                    account.get('PasswordHash')
+                    or account.get('Password')
+                    or account.get('password')
+                )
+            if account and verify_password(stored_password, password):
+                session['supplier_user'] = {
+                    'id': account.get('Id'),
+                    'name': account.get('FullName')
+                    or account.get('Name')
+                    or account.get('DisplayName')
+                    or account.get('Email')
+                    or account.get('Username')
+                    or identifier,
+                    'email': account.get('Email') or account.get('Username') or identifier,
+                }
+                flash('Welcome back to the supplier dashboard.', 'success')
+                return redirect(next_url)
+            flash('Invalid supplier credentials. Please try again.', 'danger')
+
+    return render_template('supplier_login.html', next=next_url)
+
+
+@app.route('/supplier/logout')
+def supplier_logout():
+    session.pop('supplier_user', None)
+    flash('You have been signed out of the supplier console.', 'info')
+    return redirect(url_for('supplier_login'))
+
+
+@app.route('/customer/register', methods=['GET', 'POST'])
+def customer_register():
+    if session.get('customer_user'):
+        flash('You are already signed in.', 'info')
+        return redirect(url_for('storefront'))
+
+    if request.method == 'POST':
+        full_name = request.form.get('full_name', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        if not full_name or not email or not password:
+            flash('Please complete all required fields.', 'warning')
+        elif password != confirm_password:
+            flash('Passwords do not match.', 'warning')
+        else:
+            try:
+                create_customer_account(full_name, email, password)
+                flash('Account created successfully. You can now sign in.', 'success')
+                return redirect(url_for('customer_login'))
+            except ValueError as exc:
+                flash(str(exc), 'danger')
+
+    return render_template('customer_register.html')
+
+
+@app.route('/customer/login', methods=['GET', 'POST'])
+def customer_login():
+    if session.get('customer_user'):
+        flash('You are already signed in.', 'info')
+        return redirect(url_for('storefront'))
+
+    next_url = resolve_next('storefront')
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+        password = request.form.get('password', '')
+        if not email or not password:
+            flash('Enter both email and password.', 'warning')
+        else:
+            account = fetch_customer_account(email)
+            if account and verify_password(account.get('PasswordHash'), password):
+                session['customer_user'] = {
+                    'id': account.get('Id'),
+                    'name': account.get('FullName'),
+                    'email': account.get('Email'),
+                }
+                flash('Welcome back to VVStore.', 'success')
+                return redirect(next_url)
+            flash('Incorrect email or password.', 'danger')
+
+    return render_template('customer_login.html', next=next_url)
+
+
+@app.route('/customer/logout')
+def customer_logout():
+    session.pop('customer_user', None)
+    flash('You have signed out successfully.', 'info')
+    return redirect(url_for('customer_login'))
+
+
 @app.route('/storefront')
 def storefront():
     try:
@@ -395,41 +728,89 @@ def storefront():
         cursor.execute("SELECT * FROM vanshul_Products")
         products = cursor.fetchall()
         columns = [column[0] for column in cursor.description]
-        products_dict = []
+        search_query = request.args.get('q', '').strip()
+        category_filter = request.args.get('category', '').strip()
+
+        all_products = []
+        category_map = defaultdict(list)
         for row in products:
             product = dict(zip(columns, row))
-            # Parse PhotoPaths JSON
-            if product['PhotoPaths']:
+            if product.get('PhotoPaths'):
                 try:
                     product['photo_list'] = json.loads(product['PhotoPaths'])
                 except json.JSONDecodeError:
                     product['photo_list'] = []
             else:
                 product['photo_list'] = []
-            # Calculate discount
-            if product['SalePrice'] and product['SalePrice'] < product['SellingPrice']:
+
+            if product.get('SalePrice') and product['SalePrice'] < product['SellingPrice']:
                 product['discount'] = round(((product['SellingPrice'] - product['SalePrice']) / product['SellingPrice']) * 100, 2)
                 product['display_price'] = product['SalePrice']
             else:
                 product['discount'] = 0.0
                 product['display_price'] = product['SellingPrice']
-            products_dict.append(product)
-        total_quantity = sum(row['Quantity'] for row in products_dict) if products_dict else 0
-        logger.info(f"Retrieved {len(products_dict)} products for storefront")
+
+            product_category = (product.get('Category') or 'General').strip() or 'General'
+            category_map[product_category].append(product)
+            all_products.append(product)
+
+        def matches_filters(item):
+            matches_search = True
+            matches_category = True
+            if search_query:
+                needle = search_query.lower()
+                matches_search = (
+                    needle in (item.get('ItemName') or '').lower()
+                    or needle in (item.get('Category') or '').lower()
+                    or needle in (item.get('Supplier') or '').lower()
+                )
+            if category_filter:
+                matches_category = category_filter.lower() == (item.get('Category') or 'General').lower()
+            return matches_search and matches_category
+
+        filtered_products = [item for item in all_products if matches_filters(item)]
+        total_quantity = sum(item.get('Quantity') or 0 for item in filtered_products)
+
+        featured_categories = []
+        for category, items in sorted(category_map.items(), key=lambda entry: len(entry[1]), reverse=True)[:4]:
+            sample_product = next((itm for itm in items if itm.get('photo_list')), items[0] if items else None)
+            featured_categories.append(
+                {
+                    'name': category,
+                    'count': len(items),
+                    'sample_photo': (sample_product.get('photo_list')[0] if sample_product and sample_product.get('photo_list') else None),
+                    'sample_id': sample_product.get('Id') if sample_product else None,
+                }
+            )
+
+        spotlight_product = next((item for item in filtered_products if item.get('photo_list')), filtered_products[0] if filtered_products else None)
+
         cursor.close()
         conn.close()
-        cart_count, _ = build_cart_summary(get_cart())
+
         return render_template(
             'storefront.html',
-            inventory=products_dict,
+            inventory=filtered_products,
             total_quantity=total_quantity,
-            cart_count=cart_count,
+            featured_categories=featured_categories,
+            spotlight_product=spotlight_product,
+            search_query=search_query,
+            category_filter=category_filter,
             active_page='storefront',
         )
     except pyodbc.Error as e:
         logger.error(f"Error in storefront route: {e}")
         flash(f"Error loading products: {e}", 'danger')
-        return render_template('storefront.html', inventory=[], total_quantity=0, cart_count=0)
+        return render_template(
+            'storefront.html',
+            inventory=[],
+            total_quantity=0,
+            featured_categories=[],
+            spotlight_product=None,
+            search_query=request.args.get('q', '').strip(),
+            category_filter=request.args.get('category', '').strip(),
+            active_page='storefront',
+        )
 
 
 @app.route('/product/<id>')
@@ -453,6 +834,7 @@ def product_detail(id):
 
 
 @app.route('/add_to_cart/<product_id>', methods=['POST'])
+@customer_login_required
 def add_to_cart(product_id):
     quantity = request.form.get('quantity', '1')
     try:
@@ -493,6 +875,7 @@ def add_to_cart(product_id):
 
 
 @app.route('/update_cart/<product_id>', methods=['POST'])
+@customer_login_required
 def update_cart(product_id):
     cart = get_cart()
     if product_id not in cart:
@@ -524,6 +907,7 @@ def update_cart(product_id):
 
 
 @app.route('/remove_from_cart/<product_id>', methods=['POST'])
+@customer_login_required
 def remove_from_cart(product_id):
     cart = get_cart()
     if product_id in cart:
@@ -536,6 +920,7 @@ def remove_from_cart(product_id):
 
 
 @app.route('/cart')
+@customer_login_required
 def view_cart():
     cart = get_cart()
     total_items, total_amount = build_cart_summary(cart)
@@ -548,6 +933,7 @@ def view_cart():
 
 
 @app.route('/checkout', methods=['POST'])
+@customer_login_required
 def checkout():
     cart = get_cart()
     if not cart:
@@ -580,6 +966,7 @@ def checkout():
 
 
 @app.route('/buy_now/<product_id>', methods=['POST'])
+@customer_login_required
 def buy_now(product_id):
     quantity = request.form.get('quantity', '1')
     try:
