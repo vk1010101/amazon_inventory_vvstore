@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Inventory Admin{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2qqeVYBxdEP+YB7C6yJ86dIHNDz0W1xZg2L2k2P1m7C8WRA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand" onclick="window.location.href='{{ url_for('index') }}'">
+            <i class="fas fa-store"></i>
+            <span>VVStore Console</span>
+        </div>
+        <form class="header-search" method="get" action="{{ url_for('index') }}">
+            <label class="sr-only" for="admin-search">Search inventory</label>
+            <input id="admin-search" name="search" type="search" placeholder="Search SKU, supplier or category" value="{{ analytics.search_query if analytics is defined and analytics else request.args.get('search', '') }}">
+            <button type="submit" aria-label="Search inventory">
+                <i class="fas fa-search"></i>
+            </button>
+        </form>
+        <div class="header-actions">
+            <div class="account-menu">
+                <button class="account-trigger" type="button">
+                    <i class="fas fa-user-circle"></i>
+                    <span class="account-label">
+                        {% if supplier_user %}
+                            <small>Signed in as</small>
+                            <strong>{{ supplier_user.name }}</strong>
+                        {% else %}
+                            <small>Supplier</small>
+                            <strong>Sign In</strong>
+                        {% endif %}
+                    </span>
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div class="account-dropdown">
+                    {% if supplier_user %}
+                        <span class="account-email">{{ supplier_user.email }}</span>
+                        <a href="{{ url_for('supplier_logout') }}"><i class="fas fa-right-from-bracket"></i> Logout</a>
+                        <a href="{{ url_for('storefront') }}"><i class="fas fa-store"></i> View Storefront</a>
+                    {% else %}
+                        <a href="{{ url_for('supplier_login') }}"><i class="fas fa-user-shield"></i> Supplier Login</a>
+                        <a href="{{ url_for('customer_login') }}"><i class="fas fa-user"></i> Customer Login</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <aside class="sidebar">
+        <a href="{{ url_for('index') }}" class="sidebar-link {% if active_page == 'dashboard' %}active{% endif %}">
+            <i class="fas fa-chart-line"></i>
+            <span>Dashboard</span>
+        </a>
+        <a href="{{ url_for('upload') }}" class="sidebar-link {% if active_page == 'upload' %}active{% endif %}">
+            <i class="fas fa-upload"></i>
+            <span>Single Upload</span>
+        </a>
+        <a href="{{ url_for('bulk_upload') }}" class="sidebar-link {% if active_page == 'bulk_upload' %}active{% endif %}">
+            <i class="fas fa-file-import"></i>
+            <span>Bulk Upload</span>
+        </a>
+        <a href="{{ url_for('storefront') }}" class="sidebar-link {% if active_page == 'storefront' %}active{% endif %}">
+            <i class="fas fa-storefront"></i>
+            <span>Storefront Preview</span>
+        </a>
+    </aside>
+
+    <main class="main">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="flash-container">
+                    {% for category, message in messages %}
+                        <div class="flash flash-{{ category }}">
+                            <i class="fas {% if category == 'success' %}fa-circle-check{% elif category == 'danger' %}fa-triangle-exclamation{% elif category == 'warning' %}fa-circle-exclamation{% else %}fa-circle-info{% endif %}"></i>
+                            <span>{{ message }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

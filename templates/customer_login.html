@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Sign In · VVStore</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2qqeVYBxdEP+YB7C6yJ86dIHNDz0W1xZg2L2k2P1m7C8WRA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+</head>
+<body class="auth-page">
+    <div class="auth-card">
+        <div class="auth-brand" onclick="window.location.href='{{ url_for('storefront') }}'">
+            <i class="fas fa-cart-shopping"></i>
+            <div>
+                <span class="auth-title">VVStore Marketplace</span>
+                <span class="auth-subtitle">Customer Access</span>
+            </div>
+        </div>
+        <form method="post" class="auth-form">
+            <input type="hidden" name="next" value="{{ next }}">
+            <div class="form-group">
+                <label for="email">Email</label>
+                <div class="input-with-icon">
+                    <i class="fas fa-envelope"></i>
+                    <input id="email" name="email" type="email" placeholder="you@business.com" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="input-with-icon">
+                    <i class="fas fa-lock"></i>
+                    <input id="password" name="password" type="password" placeholder="••••••••" required>
+                </div>
+            </div>
+            <button type="submit" class="action-primary full-width">
+                <i class="fas fa-right-to-bracket"></i>
+                Sign In
+            </button>
+            <div class="auth-helper">
+                <span>New to VVStore?</span>
+                <a href="{{ url_for('customer_register') }}">Create an account</a>
+            </div>
+            <div class="auth-helper">
+                <a href="{{ url_for('supplier_login') }}">Supplier login</a>
+                <a href="{{ url_for('storefront') }}">Back to storefront</a>
+            </div>
+        </form>
+    </div>
+    <footer class="auth-footer">&copy; {{ now().year }} VVStore Commerce Platform</footer>
+</body>
+</html>
