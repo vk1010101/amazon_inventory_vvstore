@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product Detail</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+        .detail-container {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .image-section {
+            flex: 1;
+        }
+        .image-section img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .info-section {
+            flex: 1;
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .product-name {
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .prices {
+            display: flex;
+            align-items: baseline;
+            margin: 10px 0;
+        }
+        .original-price {
+            text-decoration: line-through;
+            color: #999;
+            font-size: 1.1em;
+            margin-right: 10px;
+        }
+        .sale-price {
+            color: #b12704;
+            font-size: 1.3em;
+            font-weight: bold;
+        }
+        .discount {
+            color: #27ae60;
+            font-weight: bold;
+            margin-left: 10px;
+            background-color: #d4edda;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .quantity {
+            color: #555;
+            margin: 10px 0;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .add-to-cart, .buy-now {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 1em;
+        }
+        .add-to-cart {
+            background-color: #f7f7f7;
+            color: #333;
+        }
+        .buy-now {
+            background-color: #ff9900;
+            color: #fff;
+        }
+        .buy-now:hover {
+            background-color: #e68900;
+        }
+        .offers {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        .offers h4 {
+            margin-top: 0;
+        }
+        .offers ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .offers li {
+            margin: 5px 0;
+        }
+        .delivery-info {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 15px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="detail-container">
+        <div class="image-section">
+            <img id="main-image" 
+                 src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==" 
+                 alt="{{ item.ItemName | default('Product Image') }}" 
+                 style="width: 100%; height: auto;">
+        </div>
+        <div class="info-section">
+            <h2 class="product-name">{{ item.ItemName | default('Unnamed Product') }}</h2>
+            <div class="prices">
+                <span class="original-price">${{ "%.2f"|format(item.SellingPrice | default(0)) }}</span>
+                {% if item.SalePrice and item.discount > 0 %}
+                    <span class="sale-price">${{ "%.2f"|format(item.SalePrice) }}</span>
+                    <span class="discount">{{ item.discount }}% OFF</span>
+                {% else %}
+                    <span class="sale-price">${{ "%.2f"|format(item.SellingPrice | default(0)) }}</span>
+                {% endif %}
+            </div>
+            <p class="quantity">Available: {{ item.Quantity | default(0) }}</p>
+            <div class="buttons">
+                <button class="add-to-cart" onclick="alert('Added to cart!')">Add to Cart</button>
+                <button class="buy-now" onclick="alert('Proceeding to checkout!')">Buy Now</button>
+            </div>
+            <div class="offers">
+                <h4>Available Offers</h4>
+                <ul>
+                    <li>Bank Offer 5% cashback on Axis Bank Flipkart Debit Card up to ₹750 T&C</li>
+                    <li>Bank Offer 5% cashback on Flipkart SBI Credit Card up to ₹4,000 per calendar quarter T&C</li>
+                    <li>Special Price Get extra 14% off T&C</li>
+                </ul>
+            </div>
+            <p class="delivery-info">Free Delivery on orders over ₹500 | In Stock</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if item.photo_list %}
+                var photoList = {{ item.photo_list | tojson | safe }};
+                if (photoList && photoList.length > 0) {
+                    var firstPhoto = photoList[0];
+                    var mainImage = document.getElementById('main-image');
+                    if (mainImage) {
+                        mainImage.src = '/static/photos/' + firstPhoto;
+                        mainImage.alt = '{{ item.ItemName }}';
+                        mainImage.onerror = function() { 
+                            this.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==';
+                        };
+                    }
+                }
+            {% endif %}
+        });
+    </script>
+</body>
+</html>

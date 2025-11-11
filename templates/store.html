@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Supplier Store | Amazon Inventory</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<header class="navbar">
+  <h1><i class="fa-brands fa-amazon"></i> Supplier Store Portal</h1>
+  <nav>
+    <a href="{{ url_for('index') }}"><i class="fas fa-home"></i> Home</a>
+    <a href="{{ url_for('upload') }}"><i class="fas fa-upload"></i> Upload</a>
+    <a href="{{ url_for('bulk_upload') }}"><i class="fas fa-file-upload"></i> Bulk Upload</a>
+    <a href="{{ url_for('store') }}" class="active"><i class="fas fa-store"></i> Store</a>
+  </nav>
+</header>
+
+<div class="main">
+  <div class="card">
+    <h2><i class="fas fa-boxes"></i> Supplier Inventory Overview</h2>
+
+    {% if suppliers %}
+      {% for supplier, items in suppliers.items() %}
+      <div class="supplier-section">
+        <h3><i class="fas fa-user"></i> {{ supplier }}</h3>
+        <table>
+          <tr>
+            <th>Item Name</th>
+            <th>Category</th>
+            <th>Quantity</th>
+            <th>Selling Price</th>
+            <th>Profit Margin</th>
+          </tr>
+          {% for item in items %}
+          <tr>
+            <td>{{ item.itemname or item.ItemName }}</td>
+            <td>{{ item.category or item.Category }}</td>
+            <td>{{ item.quantity or item.Quantity }}</td>
+            <td>₹{{ "%.2f"|format(item.sellingprice or item.SellingPrice) }}</td>
+            <td>{{ item.profitmargin or item.ProfitMargin }}%</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+      {% endfor %}
+    {% else %}
+      <p>No supplier data found.</p>
+    {% endif %}
+  </div>
+</div>
+
+</body>
+</html>

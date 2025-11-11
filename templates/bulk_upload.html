@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Bulk Upload</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <header>Inventory Management <div>Admin</div></header>
+
+    <div class="sidebar">
+        <a href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}class="active"{% endif %}>
+            <i class="fas fa-tachometer-alt"></i> Dashboard
+        </a>
+        <a href="{{ url_for('upload') }}" {% if request.endpoint == 'upload' %}class="active"{% endif %}>
+            <i class="fas fa-upload"></i> Single Upload
+        </a>
+        <a href="{{ url_for('bulk_upload') }}" {% if request.endpoint == 'bulk_upload' %}class="active"{% endif %}>
+            <i class="fas fa-file-upload"></i> Bulk Upload
+        </a>
+        <a href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}class="active"{% endif %}>
+
+            <i class="fas fa-chart-line"></i> MIS
+        </a>
+        <a href="{{ url_for('settings') }}" {% if request.endpoint == 'settings' %}class="active"{% endif %}>
+            <i class="fas fa-cog"></i> Settings
+        </a>
+    </div>
+
+    <div class="main">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="card">
+            <h2>Bulk CSV Upload</h2>
+            <p><strong>Format:</strong> item_name,category,supplier,purchase_price,profit_margin,quantity</p>
+            <div class="drag-drop" id="dragArea">
+                <i class="fas fa-cloud-upload-alt"></i><br>
+                Click or Drag CSV Here
+                <input type="file" name="file" id="fileInput" style="display:none;" accept=".csv">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropArea = document.getElementById('dragArea');
+        const fileInput = document.getElementById('fileInput');
+
+        // Handle drag events
+        ['dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                dropArea.classList.toggle('active', eventName === 'dragover');
+            });
+        });
+
+        // Handle file drop
+        dropArea.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                uploadFile(files[0]);
+            }
+        });
+
+        // Handle file selection via click
+        dropArea.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => {
+            if (fileInput.files.length > 0) {
+                uploadFile(fileInput.files[0]);
+            }
+        });
+
+        // Function to upload file via AJAX
+        function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/bulk_upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json()) // Assuming JSON response for now
+            .then(data => {
+                if (data.message) {
+                    alert(data.message); // Simple feedback
+                    window.location.reload(); // Reload to show flash messages
+                }
+            })
+            .catch(error => {
+                alert('Error uploading file: ' + error);
+                window.location.reload();
+            });
+        }
+    </script>
+</body>
+</html>

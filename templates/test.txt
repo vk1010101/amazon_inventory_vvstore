@@ -1,0 +1,93 @@
+import openpyxl
+from openpyxl import Workbook
+import tkinter as tk
+from tkinter import messagebox
+import os
+
+file_name = "DATA_CSOS.xlsx"
+
+try:
+    # --- CREATE OR LOAD WORKBOOK ---
+    if os.path.exists(file_name):
+        wb = openpyxl.load_workbook(file_name)
+        print("🔁 Existing workbook found. Updating Output Sheet...")
+    else:
+        wb = Workbook()
+        print("📘 Creating new workbook...")
+
+        # --- SHEET 1: Numbers ---
+        sheet1 = wb.active
+        sheet1.title = "Sheet1"
+        numbers = [1, 3, 5, 6]  # Columns to fetch
+        sheet1.cell(row=1, column=1, value="Numbers")
+        for i, num in enumerate(numbers, start=2):
+            sheet1.cell(row=i, column=1, value=num)
+
+        # --- SHEET 2: People Data ---
+        sheet2 = wb.create_sheet("Sheet2")
+        headers = ["Sr No", "Name", "Qualification", "Phone", "Email ID", "Income", "Sex", "Post in Office"]
+        for col, head in enumerate(headers, start=1):
+            sheet2.cell(row=1, column=col, value=head)
+
+        # Add 5 sample people
+        data = [
+            [1, "Vanshul", "B.A. English Hons", "9876543210", "vanshul@example.com", "50000", "M", "Team Leader"],
+            [2, "Damon", "MBA", "9998887776", "damon@example.com", "70000", "M", "HR Manager"],
+            [3, "Stefan", "B.Tech", "8899776655", "stefan@example.com", "60000", "M", "Developer"],
+            [4, "Elena", "M.A. Psychology", "7788996655", "elena@example.com", "55000", "F", "Counselor"],
+            [5, "Elijah", "PhD", "9090909090", "elijah@example.com", "80000", "M", "Director"]
+        ]
+
+        for r_idx, row in enumerate(data, start=2):
+            for c_idx, value in enumerate(row, start=1):
+                sheet2.cell(row=r_idx, column=c_idx, value=value)
+
+    # --- ACCESS SHEETS ---
+    sheet1 = wb["Sheet1"]
+    sheet2 = wb["Sheet2"]
+
+    # --- REMOVE OLD Output Sheet IF EXISTS ---
+    if "Output Sheet" in wb.sheetnames:
+        wb.remove(wb["Output Sheet"])
+
+    # --- CREATE Output Sheet ---
+    output_sheet = wb.create_sheet("Output Sheet", 2)
+
+    # --- COLUMN-WISE FETCH ---
+    filter_columns = [sheet1.cell(row=i, column=1).value for i in range(2, sheet1.max_row + 1) if sheet1.cell(row=i, column=1).value is not None]
+
+    output_col = 1
+    for col_num in filter_columns:
+        output_row = 1
+        # Copy header first
+        header = sheet2.cell(row=1, column=col_num).value
+        output_sheet.cell(row=output_row, column=output_col, value=header)
+        output_row += 1
+        # Copy each value in the column vertically
+        for r in range(2, sheet2.max_row + 1):
+            val = sheet2.cell(row=r, column=col_num).value
+            output_sheet.cell(row=output_row, column=output_col, value=val)
+            output_row += 1
+        output_col += 1
+
+    # --- SAVE FILE ---
+    try:
+        wb.save(file_name)
+    except PermissionError:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("Error", "❌ Close DATA_CSOS.xlsx in Excel before running this script!")
+        root.destroy()
+        exit()
+
+    # --- POP-UP SUCCESS ---
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showinfo("Success", "✅ Data transferred to Output Sheet vertically!")
+    root.destroy()
+
+    print("✅ Excel file created/updated successfully! Output Sheet is vertical now.")
+
+except Exception as e:
+    print("❌ Something went wrong:", e)
+

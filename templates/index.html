@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Defines the document as HTML5 and sets the language to English -->
+    <meta charset="UTF-8">
+    <title>Inventory Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <header>Inventory Management <div>Admin</div></header>
+
+    <div class="sidebar">
+        <a href="{{ url_for('index') }}" class="active"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+        <a href="{{ url_for('upload') }}"><i class="fas fa-upload"></i> Single Upload</a>
+        <a href="{{ url_for('bulk_upload') }}"><i class="fas fa-file-upload"></i> Bulk Upload</a>
+    </div>
+
+    <div class="main">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="cards">
+            <div class="card card-blue">
+                <h3>Total Products</h3>
+                <p><i class="fas fa-boxes"></i> {{ inventory|length }}</p>
+            </div>
+            <div class="card card-green">
+                <h3>Total Quantity</h3>
+                <p><i class="fas fa-cubes"></i> {{ total_quantity }}</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Inventory Overview</h2>
+            {% if inventory %}
+                <table>
+                    <tr>
+                        <th>Name</th>
+                        <th>Category</th>
+                        <th>Supplier</th>
+                        <th>Purchase Price</th>
+                        <th>Profit Margin</th>
+                        <th>Selling Price</th>
+                        <th>Quantity</th>
+                        <th>Status</th>
+                    </tr>
+                    {% for item in inventory %}
+                        <tr>
+                            <td>{{ item.itemname or item.ItemName }}</td>
+                            <td>{{ item.category or item.Category }}</td>
+                            <td>{{ item.supplier or item.Supplier }}</td>
+                            <td>${{ "%.2f"|format(item.purchase_price or item.PurchasePrice) }}</td>
+                            <td>{{ item.profit_margin or item.ProfitMargin }}%</td>
+                            <td>${{ "%.2f"|format(item.selling_price or item.SellingPrice) }}</td>
+                            <td>{{ item.quantity or item.Quantity }}</td>
+                            <td>
+                                {% set qty = item.quantity or item.Quantity %}
+                                {% if qty > 10 %}
+                                    <span class="badge badge-green">In Stock</span>
+                                {% elif qty > 0 %}
+                                    <span class="badge badge-orange">Low Stock</span>
+                                {% else %}
+                                    <span class="badge badge-red">Out of Stock</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            {% else %}
+                <p>No products yet. <a href="{{ url_for('upload') }}">Add your first product.</a></p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
