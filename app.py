@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
+import binascii
 import csv
+import hashlib
 import os
 import uuid
 import json
@@ -193,51 +195,146 @@ def map_row(cursor, row):
     return dict(zip(columns, row))
 
 
-def verify_password(stored_password, provided_password):
-    if stored_password is None or provided_password is None:
+def _normalise_password_value(value):
+    """Return a comparable representation for password data fetched from SQL Server."""
+
+    if value is None:
+        return None
+
+    # pyodbc returns VARBINARY columns as memoryview objects
+    if isinstance(value, memoryview):
+        value = value.tobytes()
+
+    if isinstance(value, bytearray):
+        value = bytes(value)
+
+    if isinstance(value, bytes):
+        try:
+            return value.decode('utf-8')
+        except UnicodeDecodeError:
+            # Return raw bytes so the caller can perform digest comparisons
+            return value
+
+    if isinstance(value, str):
+        return value.strip()
+
+    return value
+
+
+def _check_sql_digest(expected_digest, provided_password):
+    """Compare a SQL Server HASHBYTES digest with the provided password."""
+
+    if expected_digest is None:
         return False
 
-    stored_password = str(stored_password)
-    if stored_password.startswith('pbkdf2:'):
-        return check_password_hash(stored_password, provided_password)
-    return stored_password == provided_password
+    if isinstance(expected_digest, str):
+        digest_str = expected_digest.strip().lower()
+        if digest_str.startswith('0x'):
+            try:
+                expected_digest = binascii.unhexlify(digest_str[2:])
+            except (binascii.Error, ValueError):
+                return False
+        elif all(c in '0123456789abcdef' for c in digest_str) and len(digest_str) in {64, 128}:
+            try:
+                expected_digest = binascii.unhexlify(digest_str)
+            except (binascii.Error, ValueError):
+                return False
+        else:
+            return False
+
+    if isinstance(expected_digest, bytes):
+        for algorithm in ('sha512', 'sha256'):
+            digest = hashlib.new(algorithm, provided_password.encode('utf-8')).digest()
+            if digest == expected_digest:
+                return True
+
+    return False
+
+
+def verify_password(stored_password, provided_password):
+    if stored_password is None or not provided_password:
+        return False
+
+    provided_password = provided_password.strip()
+    normalised = _normalise_password_value(stored_password)
+
+    if normalised is None:
+        return False
+
+    if isinstance(normalised, bytes):
+        return _check_sql_digest(normalised, provided_password)
+
+    if isinstance(normalised, str):
+        if normalised.startswith('pbkdf2:'):
+            return check_password_hash(normalised, provided_password)
+        if _check_sql_digest(normalised, provided_password):
+            return True
+        return normalised == provided_password
+
+    return False
 
 
 def fetch_supplier_account(identifier):
     conn = get_db()
-    cursor = conn.cursor()
+    table_candidates = [
+        'Admins',
+        'vanshul_Admins',
+        'SupplierUsers',
+    ]
+    field_candidates = ['Email', 'Username', 'UserName', 'LoginId']
     try:
-        cursor.execute(
-            """
-            SELECT TOP 1 *
-            FROM Admins
-            WHERE Email = ? OR Username = ?
-            """,
-            (identifier, identifier),
-        )
-        row = cursor.fetchone()
-        return map_row(cursor, row) if row else None
+        for table_name in table_candidates:
+            for field in field_candidates:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        f"SELECT TOP 1 * FROM {table_name} WHERE {field} = ?",
+                        (identifier,),
+                    )
+                    row = cursor.fetchone()
+                except pyodbc.ProgrammingError:
+                    cursor.close()
+                    continue
+
+                if row:
+                    account = map_row(cursor, row)
+                    cursor.close()
+                    return account
+                cursor.close()
+        return None
     finally:
-        cursor.close()
         conn.close()
 
 
 def fetch_customer_account(email):
     conn = get_db()
-    cursor = conn.cursor()
+    table_candidates = [
+        'Customers',
+        'vanshul_Customers',
+        'CustomerAccounts',
+    ]
+    field_candidates = ['Email', 'EmailAddress']
     try:
-        cursor.execute(
-            """
-            SELECT TOP 1 *
-            FROM Customers
-            WHERE Email = ?
-            """,
-            (email,),
-        )
-        row = cursor.fetchone()
-        return map_row(cursor, row) if row else None
+        for table_name in table_candidates:
+            for field in field_candidates:
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        f"SELECT TOP 1 * FROM {table_name} WHERE {field} = ?",
+                        (email,),
+                    )
+                    row = cursor.fetchone()
+                except pyodbc.ProgrammingError:
+                    cursor.close()
+                    continue
+
+                if row:
+                    account = map_row(cursor, row)
+                    cursor.close()
+                    return account
+                cursor.close()
+        return None
     finally:
-        cursor.close()
         conn.close()
 
 
